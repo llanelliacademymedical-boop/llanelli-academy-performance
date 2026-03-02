@@ -2,68 +2,227 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Llanelli Town Academy Performance Dashboard</title>
+<title>Llanelli Town Academy Performance Overview Report</title>
+
+<script src="libs/chart.min.js"></script>
+<script src="libs/jspdf.umd.min.js"></script>
+<script src="libs/html2canvas.min.js"></script>
 
 <style>
-body { font-family: Arial; background:#f4f6f9; text-align:center; }
-#loginBox { margin-top:150px; }
-input { padding:10px; }
-button { padding:10px 20px; cursor:pointer; }
-#app { display:none; }
-.container { max-width:1200px; margin:auto; padding:40px; }
+body {font-family:Arial;background:#f4f6f9;padding:40px;text-align:center;}
+.container {max-width:1400px;margin:auto;background:white;padding:30px;border-radius:16px;}
+select,button,input {padding:8px;margin:10px;}
+.scorecards {display:flex;gap:20px;justify-content:center;margin-top:20px;}
+.card {padding:15px;border-radius:10px;width:200px;color:white;font-weight:bold;}
+.green {background:#2e7d32;}
+.amber {background:#f9a825;}
+.red {background:#c62828;}
+.insights {margin-top:40px;text-align:left;padding:20px;border-left:6px solid #b30000;background:#fafafa;}
+canvas {margin-top:40px;}
+#app {display:none;}
 </style>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<script>
-
-const APP_PASSWORD = "Llanelli25";
-
-function checkPassword() {
-    const input = document.getElementById("passwordInput").value;
-    if (input === APP_PASSWORD) {
-        document.getElementById("loginBox").style.display = "none";
-        document.getElementById("app").style.display = "block";
-    } else {
-        alert("Incorrect password.");
-    }
-}
-
-</script>
 </head>
 
 <body>
 
-<div id="loginBox">
+<div id="login">
 <h2>Llanelli Town Academy Performance Dashboard</h2>
-<p>Please enter password to access.</p>
 <input type="password" id="passwordInput" placeholder="Enter Password">
-<button onclick="checkPassword()">Access Dashboard</button>
+<button onclick="checkPassword()">Access</button>
 </div>
 
 <div id="app">
-<div class="container">
-<h1>Llanelli Town Academy Performance Dashboard</h1>
-<p>This is your fully embedded performance system.</p>
 
-<canvas id="demoChart"></canvas>
+<div class="container" id="reportContent">
+
+<h1>Llanelli Town Academy Performance Overview Report</h1>
+
+<label>Age Group:</label>
+<select id="ageGroupSelect"></select>
+
+<label>Player:</label>
+<select id="playerSelect"></select>
+
+<button id="downloadBtn" onclick="downloadPDF()">Download PDF</button>
+
+<h2>Age Group Overview</h2>
+<canvas id="groupChart"></canvas>
+
+<div class="scorecards">
+<div id="sprintCard" class="card"></div>
+<div id="iftCard" class="card"></div>
+<div id="cmjCard" class="card"></div>
+</div>
+
+<h2>Individual 30m Sprint & 30-15IFT</h2>
+<canvas id="individualChart"></canvas>
+
+<h2>Individual CMJ</h2>
+<canvas id="cmjChart"></canvas>
+
+<div class="insights">
+<h3>Performance Report / Insights</h3>
+<div id="aiInsights"></div>
+</div>
+
+</div>
+</div>
 
 <script>
-const ctx = document.getElementById('demoChart');
-new Chart(ctx, {
-    type: 'bar',
-    data: {
-        labels: ['Example Athlete A', 'Example Athlete B'],
-        datasets: [{
-            label: '30m Sprint (m/s)',
-            data: [6.8, 7.1]
-        }]
+
+/* ================= PASSWORD ================= */
+
+const APP_PASSWORD = "Llanelli25";
+
+function checkPassword(){
+    const input = document.getElementById("passwordInput").value;
+    if(input === APP_PASSWORD){
+        document.getElementById("login").style.display="none";
+        document.getElementById("app").style.display="block";
+    } else {
+        alert("Incorrect password");
     }
+}
+
+/* ================= EMBED YOUR REAL DATA HERE ================= */
+
+const data = {
+  "Example Player": {
+    ageGroup: "U18",
+    dates: ["01/09/2025","01/12/2025"],
+    sprint: [7.1,7.3],
+    ift: [5.8,6.0],
+    cmj: [38,40]
+  }
+};
+
+/* ================= REST OF DASHBOARD LOGIC ================= */
+
+const ageGroupSelect=document.getElementById("ageGroupSelect");
+const playerSelect=document.getElementById("playerSelect");
+
+function initFilters(){
+    const groups=[...new Set(Object.values(data).map(p=>p.ageGroup))];
+    groups.forEach(g=>{
+        let o=document.createElement("option");
+        o.value=g;o.text=g;
+        ageGroupSelect.appendChild(o);
+    });
+    populatePlayers(groups[0]);
+}
+
+function populatePlayers(group){
+    playerSelect.innerHTML="";
+    Object.keys(data).forEach(p=>{
+        if(data[p].ageGroup===group){
+            let o=document.createElement("option");
+            o.value=p;o.text=p;
+            playerSelect.appendChild(o);
+        }
+    });
+}
+
+ageGroupSelect.addEventListener("change",()=>{
+    populatePlayers(ageGroupSelect.value);
+    buildGroupChart();
+    updateIndividual(playerSelect.value);
 });
+
+playerSelect.addEventListener("change",()=>updateIndividual(playerSelect.value));
+
+let groupChart, individualChart, cmjChart;
+
+function buildGroupChart(){
+    const group=ageGroupSelect.value;
+    const athletes=Object.keys(data).filter(p=>data[p].ageGroup===group);
+
+    const names=[], sprint=[], ift=[];
+    athletes.forEach(p=>{
+        const last=data[p].sprint.length-1;
+        names.push(p);
+        sprint.push(data[p].sprint[last]);
+        ift.push(data[p].ift[last]);
+    });
+
+    if(groupChart) groupChart.destroy();
+
+    groupChart=new Chart(document.getElementById('groupChart'),{
+        type:'bar',
+        data:{
+            labels:names,
+            datasets:[
+                {label:'30m Sprint',data:sprint,backgroundColor:'rgba(255,0,0,0.7)',stack:'combined'},
+                {label:'30-15IFT',data:ift,backgroundColor:'rgba(0,128,0,0.7)',stack:'combined'}
+            ]
+        },
+        options:{scales:{x:{stacked:true},y:{stacked:true}}}
+    });
+}
+
+function updateIndividual(player){
+    const d=data[player];
+
+    if(individualChart) individualChart.destroy();
+    if(cmjChart) cmjChart.destroy();
+
+    individualChart=new Chart(document.getElementById('individualChart'),{
+        type:'line',
+        data:{
+            labels:d.dates,
+            datasets:[
+                {label:'30-15IFT',data:d.ift,borderColor:'green',fill:false},
+                {label:'30m Sprint',data:d.sprint,borderColor:'red',fill:'-1',backgroundColor:'rgba(255,0,0,0.15)'}
+            ]
+        }
+    });
+
+    cmjChart=new Chart(document.getElementById('cmjChart'),{
+        type:'line',
+        data:{labels:d.dates,datasets:[
+            {label:'CMJ (cm)',data:d.cmj,borderColor:'blue'}
+        ]}
+    });
+}
+
+/* ================= MULTI-PAGE PDF ================= */
+
+async function downloadPDF(){
+    const btn=document.getElementById("downloadBtn");
+    btn.style.display="none";
+
+    const element=document.getElementById("reportContent");
+
+    html2canvas(element,{scale:2}).then(canvas=>{
+        const imgData=canvas.toDataURL("image/png");
+        const {jsPDF}=window.jspdf;
+        const pdf=new jsPDF("p","mm","a4");
+
+        const pageHeight=pdf.internal.pageSize.getHeight();
+        const pageWidth=pdf.internal.pageSize.getWidth();
+
+        let imgHeight=canvas.height*pageWidth/canvas.width;
+        let heightLeft=imgHeight;
+        let position=0;
+
+        pdf.addImage(imgData,'PNG',0,position,pageWidth,imgHeight);
+        heightLeft-=pageHeight;
+
+        while(heightLeft>0){
+            position=heightLeft-imgHeight;
+            pdf.addPage();
+            pdf.addImage(imgData,'PNG',0,position,pageWidth,imgHeight);
+            heightLeft-=pageHeight;
+        }
+
+        pdf.save("Performance_Report.pdf");
+        btn.style.display="inline-block";
+    });
+}
+
+initFilters();
+buildGroupChart();
+updateIndividual(Object.keys(data)[0]);
+
 </script>
-
-</div>
-</div>
-
 </body>
 </html>
